@@ -1,0 +1,15 @@
+{
+  "name": "retry-policy-linter",
+  "version": "0.1.0",
+  "description": "A streaming linter that flags risky retry patterns in source code",
+  "type": "module",
+  "main": "dist/linter.js",
+  "types": "dist/linter.d.ts",
+  "bin": {
+    "retry-lint": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "license": "MIT"
+}
