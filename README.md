@@ -57,15 +57,18 @@ etc.) and the finding goes away.
 | id | what it flags |
 | --- | --- |
 | `no-immediate-retry` | `retry()` called in a `catch` block before any delay/backoff call |
+| `unbounded-retry-loop` | `retry()` inside a `while (true)` / `for (;;)` loop with no `break` |
 
 This checks for retry() calls and delay-like function names by regex and
-tracks brace depth to know when a `catch` block ends — it does not parse
-the file. That keeps it dependency-free and cheap to run per line, at
-the cost of being foolable by braces inside strings or comments.
+tracks brace depth to know when a `catch` block or loop ends — it does
+not parse the file. That keeps it dependency-free and cheap to run per
+line, at the cost of being foolable by braces inside strings or comments,
+and by loops whose only exit is a `return` or `throw` instead of a
+`break`.
 
 ## Status
 
-Early skeleton. One rule, a CLI, and the streaming core it runs on. See
+Early skeleton. Two rules, a CLI, and the streaming core they run on. See
 the roadmap in the project notes for what's next — more retry-specific
-rules (unbounded retry loops, missing jitter, catching everything before
-retrying), a config file for turning rules on/off, and a test suite.
+rules (missing jitter on backoff, catching everything before retrying),
+a config file for turning rules on/off, and a test suite.

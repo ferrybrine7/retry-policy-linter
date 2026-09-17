@@ -81,4 +81,84 @@ export const noImmediateRetryRule: LintRule = {
   createChecker: createNoImmediateRetryChecker,
 };
 
-export const rules: LintRule[] = [noImmediateRetryRule];
+const LOOP_RE = /\b(while\s*\(\s*(?:true|1)\s*\)|for\s*\(\s*;\s*;\s*\))/;
+const BREAK_RE = /\bbreak\b/;
+
+interface LoopFrame {
+  depth: number;
+  sawBreak: boolean;
+  retryLine: number | null;
+}
+
+/**
+ * Flags a retry() call inside a `while (true)` or `for (;;)` loop that
+ * never hits a `break`. Without a break, there is nothing in the loop
+ * itself that can stop it — a max-attempts check that never breaks out
+ * is just a counter nobody reads, so `break` is the one signal that a
+ * loop like this actually ends.
+ *
+ * Same brace-depth-tracking approach as no-immediate-retry, and the same
+ * trade-off: it will flag a genuinely bounded loop if the only exit is a
+ * `return` or `throw` rather than a `break`, and it can miss a break that
+ * lives inside a nested conditional block on its own line pattern. That
+ * is an acceptable false-positive rate for a rule that has to run one
+ * line at a time with no parser.
+ */
+function createUnboundedRetryLoopChecker(): LineChecker {
+  const stack: LoopFrame[] = [];
+  let depth = 0;
+
+  return {
+    onLine(line: string, lineNumber: number): Finding[] {
+      const findings: Finding[] = [];
+      const opensLoop = LOOP_RE.test(line);
+
+      for (const ch of line) {
+        if (ch === "{") {
+          depth++;
+          if (opensLoop && (stack.length === 0 || stack[stack.length - 1]!.depth !== depth)) {
+            stack.push({ depth, sawBreak: false, retryLine: null });
+          }
+        } else if (ch === "}") {
+          if (stack.length > 0 && stack[stack.length - 1]!.depth === depth) {
+            const frame = stack.pop()!;
+            if (frame.retryLine !== null && !frame.sawBreak) {
+              findings.push({
+                line: frame.retryLine,
+                ruleId: "unbounded-retry-loop",
+                severity: "warning",
+                message:
+                  "retry() inside a while(true)/for(;;) loop with no break — this can retry forever with no attempt limit",
+              });
+            }
+          }
+          depth--;
+        }
+      }
+
+      if (stack.length === 0) {
+        return findings;
+      }
+
+      const frame = stack[stack.length - 1]!;
+
+      if (RETRY_CALL_RE.test(line) && frame.retryLine === null) {
+        frame.retryLine = lineNumber;
+      }
+
+      if (BREAK_RE.test(line)) {
+        frame.sawBreak = true;
+      }
+
+      return findings;
+    },
+  };
+}
+
+export const unboundedRetryLoopRule: LintRule = {
+  id: "unbounded-retry-loop",
+  description: "retry() in a while(true)/for(;;) loop should have a break so it can't run forever",
+  createChecker: createUnboundedRetryLoopChecker,
+};
+
+export const rules: LintRule[] = [noImmediateRetryRule, unboundedRetryLoopRule];
